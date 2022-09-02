@@ -1,0 +1,15 @@
+name: MuscleScan
+
+channels:
+  - conda-forge
+      
+dependencies:
+  - python=3.9
+  - pyqt=5.12.3
+  - napari
+  - numpy
+  - scipy
+  - scikit-image
+  - matplotlib-base
+  - joblib
+  - pip
