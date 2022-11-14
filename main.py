@@ -25,7 +25,6 @@ img = raw[9,...]
 
 #%%
 
-img = raw[9,...]
 n_filters=16
 kernel_size=25
 sigma=3
@@ -57,40 +56,49 @@ print('Apply filters')
 
 # Apply filters and get orientations
 img_filt = np.zeros((n_filters, img.shape[0], img.shape[1]))
-# img_grad = np.zeros((n_filters, img.shape[0], img.shape[1]))
 for i, kernel in enumerate(filters):
-    img_filt[i,...] = cv2.filter2D(img, -1, kernel)
-#     img_grad[i,...] = gradient(
-#         ranged_uint8(img_filt[i,...], 0.1, 99.9), disk(lmbda))    
-# img_grad_max = np.argmax(img_grad, axis=0)       
+    img_filt[i,...] = cv2.filter2D(img, -1, kernel)  
 
 end = time.time()
 print(f'  {(end-start):5.3f} s')
 
 # -----------------------------------------------------------------------------
 
-from skimage.transform import resize
+from skimage.filters import threshold_li
+thresh_coeff = 0.5
+thresh = threshold_li(img) * thresh_coeff
 
 start = time.time()
 print('tile image')
 
-roi_size = 50
-roi_split = img.shape[0]//roi_size
-
-grid_filt_sd = np.zeros_like(img)
-for x, temp in enumerate(np.split(img, roi_split, axis=0)):
-    for y, temp in enumerate(np.split(temp, roi_split, axis=1)):
+roi_size = 20
+patched_local_mean = np.zeros_like(img)
+patched_max_sd = np.zeros_like(img)
+for yi in np.arange(0, img.shape[0], roi_size):
+    for xi in np.arange(0, img.shape[1], roi_size):
         
-        xi = x*roi_split
-        xf = x*roi_split + roi_size
-        yi = y*roi_split
-        yf = y*roi_split + roi_size
+        # Get idx
+        idx = (
+            np.repeat(np.arange(yi,yi+roi_size), roi_size),
+            np.tile(np.arange(xi,xi+roi_size), roi_size)
+            )
         
-        grid_filt_sd[xi:, y*roi_split]
+        # idx = np.ravel_multi_index((
+        #     np.repeat(np.arange(yi,yi+roi_size), roi_size),
+        #     np.tile(np.arange(xi,xi+roi_size), roi_size), 
+        #     ), (img.shape))            
         
-# img_tiled = np.array(img_tiled)  
-
-# img_untiled =       
+        # Get local mean (img)
+        patch = img[yi:yi+roi_size,xi:xi+roi_size]  
+        local_mean = np.mean(patch)
+        
+        # Get max sd (img_filt)
+        patch_filt = img_filt[:,yi:yi+roi_size,xi:xi+roi_size]        
+        max_sd = np.argmax(np.std(patch_filt, axis=(1,2)))
+        
+        # Create output images
+        patched_local_mean[yi:yi+roi_size,xi:xi+roi_size] = local_mean
+        patched_max_sd[yi:yi+roi_size,xi:xi+roi_size] = max_sd
 
 end = time.time()
 print(f'  {(end-start):5.3f} s')
@@ -98,7 +106,9 @@ print(f'  {(end-start):5.3f} s')
 # -----------------------------------------------------------------------------
 
 
-viewer = napari.Viewer()
+# viewer = napari.Viewer()
+# viewer.add_image(patch_mean)
+# viewer.add_image(patch_filt_sd)
 # viewer.add_image(np.array(tiles))
 # viewer.add_image(np.array(filters))
 # viewer.add_image(img_filt)
