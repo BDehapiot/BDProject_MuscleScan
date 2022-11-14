@@ -69,33 +69,34 @@ print(f'  {(end-start):5.3f} s')
 
 # -----------------------------------------------------------------------------
 
+from skimage.transform import resize
+
 start = time.time()
 print('tile image')
 
-img_tiled = []
-for temp in np.split(img, 20, axis=0):
-    for temp in np.split(temp, 20, axis=1):
-        img_tiled.append(temp)
+roi_size = 50
+roi_split = img.shape[0]//roi_size
+
+grid_filt_sd = np.zeros_like(img)
+for x, temp in enumerate(np.split(img, roi_split, axis=0)):
+    for y, temp in enumerate(np.split(temp, roi_split, axis=1)):
         
-img_tiled = np.array(img_tiled)        
+        xi = x*roi_split
+        xf = x*roi_split + roi_size
+        yi = y*roi_split
+        yf = y*roi_split + roi_size
+        
+        grid_filt_sd[xi:, y*roi_split]
+        
+# img_tiled = np.array(img_tiled)  
+
+# img_untiled =       
 
 end = time.time()
 print(f'  {(end-start):5.3f} s')
 
 # -----------------------------------------------------------------------------
 
-start = time.time()
-print('untile image')
-
-img_untitled = np.zeros_like(img)
-for temp in 
-
-img_untiled = np.reshape(img_tiled, (img.shape))  
-
-end = time.time()
-print(f'  {(end-start):5.3f} s')
-
-# -----------------------------------------------------------------------------
 
 viewer = napari.Viewer()
 # viewer.add_image(np.array(tiles))
@@ -103,7 +104,7 @@ viewer = napari.Viewer()
 # viewer.add_image(img_filt)
 # viewer.add_image(img_grad)
 # viewer.add_image(img_grad_max)
-viewer.add_image(img_untiled)
+# viewer.add_image(img_untiled)
 
 #%%
 
