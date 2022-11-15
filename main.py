@@ -14,7 +14,7 @@ from functions import ranged_uint8
 
 #%% Get raw name
 
-raw_name = 'C1-2022.07.05_Luminy_22hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_1_1.tif'
+raw_name = 'C1-2022.07.05_Luminy_24hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_1_1.tif'
 
 #%% Get path and open data
 
@@ -65,56 +65,69 @@ print(f'  {(end-start):5.3f} s')
 # -----------------------------------------------------------------------------
 
 from skimage.filters import threshold_li
-thresh_coeff = 0.5
+
+thresh_coeff = 0.75
 thresh = threshold_li(img) * thresh_coeff
+
+# -----------------------------------------------------------------------------
 
 start = time.time()
 print('tile image')
 
-roi_size = 20
+roi_size = 10
+n_rois = np.square(img.shape[0]//roi_size)
 patched_local_mean = np.zeros_like(img)
 patched_max_sd = np.zeros_like(img)
+vectors = np.empty((n_rois, 2, 2))
+
+count = -1
+
 for yi in np.arange(0, img.shape[0], roi_size):
     for xi in np.arange(0, img.shape[1], roi_size):
         
-        # Get idx
-        idx = (
-            np.repeat(np.arange(yi,yi+roi_size), roi_size),
-            np.tile(np.arange(xi,xi+roi_size), roi_size)
-            )
-        
-        # idx = np.ravel_multi_index((
-        #     np.repeat(np.arange(yi,yi+roi_size), roi_size),
-        #     np.tile(np.arange(xi,xi+roi_size), roi_size), 
-        #     ), (img.shape))            
-        
+        count += 1 
+                
         # Get local mean (img)
         patch = img[yi:yi+roi_size,xi:xi+roi_size]  
         local_mean = np.mean(patch)
         
-        # Get max sd (img_filt)
-        patch_filt = img_filt[:,yi:yi+roi_size,xi:xi+roi_size]        
-        max_sd = np.argmax(np.std(patch_filt, axis=(1,2)))
+        if local_mean > thresh:
         
-        # Create output images
-        patched_local_mean[yi:yi+roi_size,xi:xi+roi_size] = local_mean
-        patched_max_sd[yi:yi+roi_size,xi:xi+roi_size] = max_sd
+            # Get max sd (img_filt)
+            patch_filt = img_filt[:,yi:yi+roi_size,xi:xi+roi_size]        
+            max_sd = np.argmax(np.std(patch_filt, axis=(1,2)))
+            
+            # Create output images
+            patched_local_mean[yi:yi+roi_size,xi:xi+roi_size] = local_mean
+            patched_max_sd[yi:yi+roi_size,xi:xi+roi_size] = max_sd
+            
+            #
+            vectors[count,0,0] = yi # y position
+            vectors[count,0,1] = xi # x position
+            vectors[count,1,0] = np.sin(thetas[max_sd] - np.pi/2) # x-y projection
+            vectors[count,1,1] = np.cos(thetas[max_sd] - np.pi/2) # x-y projection      
 
 end = time.time()
 print(f'  {(end-start):5.3f} s')
 
 # -----------------------------------------------------------------------------
 
+viewer = napari.Viewer()
+viewer.add_image(img)
+viewer.add_image(patched_local_mean)
+viewer.add_image(patched_max_sd)
+viewer.add_vectors(vectors, length=roi_size//2)
+
+# -----------------------------------------------------------------------------
 
 # viewer = napari.Viewer()
-# viewer.add_image(patch_mean)
-# viewer.add_image(patch_filt_sd)
-# viewer.add_image(np.array(tiles))
-# viewer.add_image(np.array(filters))
-# viewer.add_image(img_filt)
-# viewer.add_image(img_grad)
-# viewer.add_image(img_grad_max)
-# viewer.add_image(img_untiled)
+# vector_data = [
+# [[0, 10, 11],  # position of v0
+#  [0,  1,  2]],  # projection of v0
+# [[1, 20, 10],  # position of v1
+#  [1,  3,  2]],  # projection of v1
+# ]
+# viewer.add_vectors(vector_data)
 
 #%%
 
@@ -128,3 +141,35 @@ print(f'  {(end-start):5.3f} s')
 
 
 #%%
+
+# import napari
+# import numpy as np
+
+
+# # create the viewer and window
+# viewer = napari.Viewer()
+
+# n = 20
+# m = 40
+
+# image = 0.2 * np.random.random((n, m)) + 0.5
+# layer = viewer.add_image(image, contrast_limits=[0, 1], name='background')
+
+# # sample vector image-like data
+# # n x m grid of slanted lines
+# # random data on the open interval (-1, 1)
+# pos = np.zeros(shape=(n, m, 2), dtype=np.float32)
+# rand1 = 2 * (np.random.random_sample(n * m) - 0.5)
+# rand2 = 2 * (np.random.random_sample(n * m) - 0.5)
+
+# # assign projections for each vector
+# pos[:, :, 0] = rand1.reshape((n, m))
+# pos[:, :, 1] = rand2.reshape((n, m))
+
+# # add the vectors
+# vect = viewer.add_vectors(pos, edge_width=0.2, length=2.5)
+
+# print(image.shape, pos.shape)
+
+# if __name__ == '__main__':
+#     napari.run()
