@@ -6,31 +6,114 @@ import napari
 import numpy as np
 from skimage import io 
 from pathlib import Path
-
-from skimage.morphology import disk
-from skimage.filters.rank import gradient
-
-from functions import ranged_uint8
+from joblib import Parallel, delayed
 
 #%% Get raw name
 
-raw_name = 'C1-2022.07.05_Luminy_24hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_1_1.tif'
+stack_name = 'C1-2022.07.05_Luminy_22hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_1_1.tif'
+# stack_name = 'C1-2022.07.05_Luminy_24hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_1_1.tif'
+# stack_name = 'C1-2022.07.05_Luminy_26hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_2_2.tif'
 
 #%% Get path and open data
 
 data_path = Path(Path.cwd(), 'data')
-raw_path = Path(data_path, raw_name)
-raw = io.imread(raw_path)
-img = raw[9,...]
+stack_path = Path(data_path, stack_name)
+stack = io.imread(stack_path)
 
-#%%
+#%% Parameters
 
+# Gabor filters
 n_filters=16
 kernel_size=25
 sigma=3
 lmbda=10
-gamma=0.5
+gamma=0.25
 psi=0
+parallel=True
+
+# Patch
+patch_size = 20
+
+#%% Functions
+
+def gfilt(stack, n_filters, kernel_size, sigma, lmbda, gamma, psi, patch_size, parallel=False):
+    
+    # Nested functions --------------------------------------------------------
+    
+    def _gfilt(img):
+        
+        # Apply filters
+        img_filt = np.zeros((n_filters, img.shape[0], img.shape[1]))
+        for i, kernel in enumerate(filters):
+            img_filt[i,...] = cv2.filter2D(img, -1, kernel)  
+
+        return img_filt
+    
+    # Run ---------------------------------------------------------------------
+    
+    # Create filters  
+    filters = []    
+    thetas = np.arange(0, np.pi, np.pi/n_filters)
+    for theta in thetas:        
+        kernel = cv2.getGaborKernel(
+            (kernel_size, kernel_size), 
+            sigma, theta, lmbda, gamma, psi, 
+            ktype=cv2.CV_64F
+            )
+        kernel /= 1.0 * kernel.sum() # Brightness normalization
+        filters.append(kernel)
+        
+    # Add one dimension (if ndim == 2)
+    ndim = (stack.ndim)        
+    if ndim == 2:
+        stack = stack.reshape((1, stack.shape[0], stack.shape[1]))  
+            
+    if parallel:
+
+        # Run parallel
+        output_list = Parallel(n_jobs=-1)(
+            delayed(_gfilt)(
+                img,
+                )
+            for img in stack
+            )
+        
+    else:
+        
+        # Run serial
+        output_list = [_gfilt(
+                img,
+                )
+            for img in stack
+            ]
+    
+    return output_list
+        
+#%%
+
+start = time.time()
+print('gfilt')
+    
+output_list = gfilt(
+    stack,
+    n_filters,
+    kernel_size,
+    sigma,
+    lmbda,
+    gamma,
+    psi,
+    parallel
+    )
+
+end = time.time()
+print(f'  {(end-start):5.3f} s')  
+
+viewer = napari.Viewer()
+viewer.add_image(output_list[0])  
+
+#%%
+
+img = stack[9,...]
 
 start = time.time()
 print('Create filters')
@@ -44,6 +127,21 @@ for theta in thetas:
         sigma, theta, lmbda, gamma, psi, 
         ktype=cv2.CV_64F
         )
+    kernel /= 1.0 * kernel.sum() # Brightness normalization
+    filters.append(kernel)
+
+# Create filters   
+filters = []    
+thetas = np.arange(0, np.pi, np.pi/n_filters)
+for theta in thetas:        
+    kernel = cv2.getGaborKernel(
+        (kernel_size, kernel_size), 
+        sigma, theta, lmbda, gamma, psi, 
+        ktype=cv2.CV_64F
+        )
+    kernel /= 1.0 * kernel.sum() # Brightness normalization
+    kernel = kernel.reshape((1, kernel.shape[0], kernel.shape[1]))
+    kernel = np.repeat(kernel, n_filters, axis=0)
     filters.append(kernel)
 
 end = time.time()
@@ -73,61 +171,45 @@ thresh = threshold_li(img) * thresh_coeff
 
 start = time.time()
 print('tile image')
-
-roi_size = 10
-n_rois = np.square(img.shape[0]//roi_size)
+           
+patch_size = 20
+n_patch = np.square(img.shape[0]//patch_size)
 patched_local_mean = np.zeros_like(img)
 patched_max_sd = np.zeros_like(img)
-vectors = np.empty((n_rois, 2, 2))
+vectors = []
+for yi in np.arange(0, img.shape[0], patch_size):
+    for xi in np.arange(0, img.shape[1], patch_size):
 
-count = -1
-
-for yi in np.arange(0, img.shape[0], roi_size):
-    for xi in np.arange(0, img.shape[1], roi_size):
-        
-        count += 1 
-                
         # Get local mean (img)
-        patch = img[yi:yi+roi_size,xi:xi+roi_size]  
+        patch = img[yi:yi+patch_size,xi:xi+patch_size]  
         local_mean = np.mean(patch)
+             
+        # Get max sd (img_filt)
+        patch_filt = img_filt[:,yi:yi+patch_size,xi:xi+patch_size]        
+        max_sd = np.argmax(np.std(patch_filt, axis=(1,2)))
         
-        if local_mean > thresh:
-        
-            # Get max sd (img_filt)
-            patch_filt = img_filt[:,yi:yi+roi_size,xi:xi+roi_size]        
-            max_sd = np.argmax(np.std(patch_filt, axis=(1,2)))
-            
-            # Create output images
-            patched_local_mean[yi:yi+roi_size,xi:xi+roi_size] = local_mean
-            patched_max_sd[yi:yi+roi_size,xi:xi+roi_size] = max_sd
-            
-            #
-            vectors[count,0,0] = yi # y position
-            vectors[count,0,1] = xi # x position
-            vectors[count,1,0] = np.sin(thetas[max_sd] - np.pi/2) # x-y projection
-            vectors[count,1,1] = np.cos(thetas[max_sd] - np.pi/2) # x-y projection      
+        # Create output images
+        patched_local_mean[yi:yi+patch_size,xi:xi+patch_size] = local_mean
+        patched_max_sd[yi:yi+patch_size,xi:xi+patch_size] = max_sd
+                
+        # Create vectors
+        temp = np.array([[yi, xi], [ 
+            np.sin(thetas[max_sd]-np.pi/2),
+            np.cos(thetas[max_sd]-np.pi/2)            
+            ]])
+        vectors.append(temp)
 
 end = time.time()
 print(f'  {(end-start):5.3f} s')
 
 # -----------------------------------------------------------------------------
 
-viewer = napari.Viewer()
-viewer.add_image(img)
-viewer.add_image(patched_local_mean)
-viewer.add_image(patched_max_sd)
-viewer.add_vectors(vectors, length=roi_size//2)
-
-# -----------------------------------------------------------------------------
-
 # viewer = napari.Viewer()
-# vector_data = [
-# [[0, 10, 11],  # position of v0
-#  [0,  1,  2]],  # projection of v0
-# [[1, 20, 10],  # position of v1
-#  [1,  3,  2]],  # projection of v1
-# ]
-# viewer.add_vectors(vector_data)
+# viewer.add_image(img)
+# viewer.add_image(img_filt)
+# viewer.add_image(patched_local_mean)
+# viewer.add_image(patched_max_sd)
+# viewer.add_vectors(vectors, length=patch_size//2)
 
 #%%
 
@@ -138,38 +220,3 @@ viewer.add_vectors(vectors, length=roi_size//2)
 # io.imsave(
 #     Path(data_path, raw_name.replace('.tif', '_filt.tif')), 
 #     img_filt.astype('uint16'), check_contrast=False)
-
-
-#%%
-
-# import napari
-# import numpy as np
-
-
-# # create the viewer and window
-# viewer = napari.Viewer()
-
-# n = 20
-# m = 40
-
-# image = 0.2 * np.random.random((n, m)) + 0.5
-# layer = viewer.add_image(image, contrast_limits=[0, 1], name='background')
-
-# # sample vector image-like data
-# # n x m grid of slanted lines
-# # random data on the open interval (-1, 1)
-# pos = np.zeros(shape=(n, m, 2), dtype=np.float32)
-# rand1 = 2 * (np.random.random_sample(n * m) - 0.5)
-# rand2 = 2 * (np.random.random_sample(n * m) - 0.5)
-
-# # assign projections for each vector
-# pos[:, :, 0] = rand1.reshape((n, m))
-# pos[:, :, 1] = rand2.reshape((n, m))
-
-# # add the vectors
-# vect = viewer.add_vectors(pos, edge_width=0.2, length=2.5)
-
-# print(image.shape, pos.shape)
-
-# if __name__ == '__main__':
-#     napari.run()
