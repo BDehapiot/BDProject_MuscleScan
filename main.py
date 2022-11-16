@@ -7,6 +7,10 @@ import numpy as np
 from skimage import io 
 from pathlib import Path
 from joblib import Parallel, delayed
+from skimage.transform import resize
+from skimage.filters import threshold_li
+
+from tools.nan import nanfilt
 
 #%% Get raw name
 
@@ -22,7 +26,7 @@ stack = io.imread(stack_path)
 
 #%% Parameters
 
-# Gabor filters
+# Gabor filtering
 n_filters=16
 kernel_size=25
 sigma=3
@@ -33,14 +37,15 @@ parallel=True
 
 # Patch
 patch_size = 20
+thresh_coeff = 0.75
 
-#%% Functions: gfilt
+#%% Functions: gabor_filtering
 
-def gfilt(stack, n_filters, kernel_size, sigma, lmbda, gamma, psi, parallel=False):
+def gabor_filtering(stack, n_filters, kernel_size, sigma, lmbda, gamma, psi, parallel=False):
     
     # Nested functions --------------------------------------------------------
     
-    def _gfilt(img):
+    def _gabor_filtering(img):
         
         # Apply filters
         img_filt = np.zeros((n_filters, img.shape[0], img.shape[1]))
@@ -72,7 +77,7 @@ def gfilt(stack, n_filters, kernel_size, sigma, lmbda, gamma, psi, parallel=Fals
 
         # Run parallel
         output_list = Parallel(n_jobs=-1)(
-            delayed(_gfilt)(
+            delayed(_gabor_filtering)(
                 img,
                 )
             for img in stack
@@ -81,42 +86,48 @@ def gfilt(stack, n_filters, kernel_size, sigma, lmbda, gamma, psi, parallel=Fals
     else:
         
         # Run serial
-        output_list = [_gfilt(
+        output_list = [_gabor_filtering(
                 img,
                 )
             for img in stack
             ]
     
-    # Extract output
+    # Extract outputs
     stack_filt = np.stack([data for data in output_list], axis=0).squeeze()
     
     return stack_filt
 
 #%% Functions: patch
 
-def patch(stack, stack_filt):
+def patch_analysis(stack, stack_filt, patch_size, thresh_coeff):
     
     # Nested functions --------------------------------------------------------
     
-    def _patch(img, img_filt):
+    def _patch_analysis(img, img_filt):
         
-        local_mean = 
-        max_sd = 
-                
-        for yi in np.arange(0, img.shape[0], patch_size):
-            for xi in np.arange(0, img.shape[1], patch_size):
+        local_mean = np.zeros((img.shape[0]//patch_size, img.shape[1]//patch_size))
+        local_angle = np.zeros((img.shape[0]//patch_size, img.shape[1]//patch_size))                 
+        
+        for y, yi in enumerate(np.arange(0, img.shape[0], patch_size)):
+            for x, xi in enumerate(np.arange(0, img.shape[1], patch_size)):
                 
                 # Get local mean (img)
                 patch = img[yi:yi+patch_size,xi:xi+patch_size]  
-                local_mean = np.mean(patch)
+                local_mean[y,x] = np.mean(patch)
                      
-                # Get max sd (img_filt)
+                # Get local angle (img_filt)
                 patch_filt = img_filt[:,yi:yi+patch_size,xi:xi+patch_size]        
-                max_sd = np.argmax(np.std(patch_filt, axis=(1,2)))
+                local_angle[y,x] = np.argmax(np.std(patch_filt, axis=(1,2)))
                 
-                
-                                                        
-        return patch_data
+        # Process local angle         
+        thresh = threshold_li(stack) * thresh_coeff
+        local_angle[local_mean<thresh] = np.nan
+        local_angle = nanfilt(local_angle.astype('float'), 3, 'median')
+        
+        # Get vectors
+        
+                             
+        return local_mean, local_angle
     
     # Run ---------------------------------------------------------------------
 
@@ -125,15 +136,12 @@ def patch(stack, stack_filt):
     if ndim == 2:
         stack = stack.reshape((1, stack.shape[0], stack.shape[1]))  
         stack_filt = stack_filt.reshape((1, stack_filt.shape[0], stack_filt.shape[1])) 
-        
-    patch_data = [] 
-    thetas = np.arange(0, np.pi, np.pi/n_filters)
-            
+
     if parallel:
 
         # Run parallel
         output_list = Parallel(n_jobs=-1)(
-            delayed(_patch)(
+            delayed(_patch_analysis)(
                 img,
                 img_filt,
                 )
@@ -143,24 +151,25 @@ def patch(stack, stack_filt):
     else:
         
         # Run serial
-        output_list = [_patch(
+        output_list = [_patch_analysis(
                 img,
                 img_filt,
                 )
             for img, img_filt in zip(stack, stack_filt)
             ]
         
-    return output_list
+    # Extract outputs
+    local_mean = np.stack([data[0] for data in output_list], axis=0).squeeze()    
+    local_angle = np.stack([data[1] for data in output_list], axis=0).squeeze()     
     
-    # # Extract output
-    # patch_data = np.stack([data for data in output_list], axis=0).squeeze()
+    return local_mean, local_angle
         
 #%%
 
 start = time.time()
-print('gfilt')
+print('gabor_filtering')
     
-stack_filt = gfilt(
+stack_filt = gabor_filtering(
     stack,
     n_filters,
     kernel_size,
@@ -174,76 +183,103 @@ stack_filt = gfilt(
 end = time.time()
 print(f'  {(end-start):5.3f} s')  
 
-start = time.time()
-print('patch')
-    
-output_list = patch(
-    stack,
-    stack_filt,
-    )
-
-end = time.time()
-print(f'  {(end-start):5.3f} s')  
-
-viewer = napari.Viewer()
-viewer.add_image(stack_filt[0])  
-
-#%%
-
-# from skimage.filters import threshold_li
-
-# thresh_coeff = 0.75
-# thresh = threshold_li(stack) * thresh_coeff
-
 # -----------------------------------------------------------------------------
 
-# img = stack[9,...]
-# img_filt = stack_filt[9,...]
-# thetas = np.arange(0, np.pi, np.pi/n_filters)
-
 # start = time.time()
-# print('tile image')
-          
-# patch_data = [] 
-
-# for yi in np.arange(0, img.shape[0], patch_size):
-#     for xi in np.arange(0, img.shape[1], patch_size):
-
-#         # Get local mean (img)
-#         patch = img[yi:yi+patch_size,xi:xi+patch_size]  
-#         local_mean = np.mean(patch)
-             
-#         # Get max sd (img_filt)
-#         patch_filt = img_filt[:,yi:yi+patch_size,xi:xi+patch_size]        
-#         max_sd = np.argmax(np.std(patch_filt, axis=(1,2)))
-                
-#         # Get vectors
-#         vectors = np.array([[yi, xi], [ 
-#             np.sin(thetas[max_sd]-np.pi/2),
-#             np.cos(thetas[max_sd]-np.pi/2)            
-#             ]])
-        
-#         # Append patch_data
-#         patch_data.append((
-#             (yi, xi),
-#             patch, 
-#             patch_filt, 
-#             local_mean, 
-#             max_sd, 
-#             vectors
-#             ))
+# print('patch_analysis')
+    
+# local_mean, local_angle = patch_analysis(
+#     stack,
+#     stack_filt,
+#     patch_size,
+#     thresh_coeff,
+#     )
 
 # end = time.time()
-# print(f'  {(end-start):5.3f} s')
+# print(f'  {(end-start):5.3f} s')  
 
 # -----------------------------------------------------------------------------
 
 # viewer = napari.Viewer()
-# viewer.add_image(img)
+# viewer.add_image(local_mean)
+# viewer.add_image(local_angle)    
+
+#%%
+
+thresh_coeff = 0.75
+thresh = threshold_li(stack) * thresh_coeff
+
+# -----------------------------------------------------------------------------
+
+img = stack[9,...]
+img_filt = stack_filt[9,...]
+thetas = np.arange(0, np.pi, np.pi/n_filters)
+
+start = time.time()
+print('patch_analysis')
+          
+local_mean = np.zeros((img.shape[0]//patch_size, img.shape[1]//patch_size))
+local_angle = np.zeros((img.shape[0]//patch_size, img.shape[1]//patch_size))                 
+for y, yi in enumerate(np.arange(0, img.shape[0], patch_size)):
+    for x, xi in enumerate(np.arange(0, img.shape[1], patch_size)):
+        
+        # Get local mean (img)
+        patch = img[yi:yi+patch_size,xi:xi+patch_size]  
+        local_mean[y,x] = np.mean(patch)
+             
+        # Get max sd (img_filt)
+        patch_filt = img_filt[:,yi:yi+patch_size,xi:xi+patch_size]        
+        local_angle[y,x] = np.argmax(np.std(patch_filt, axis=(1,2)))
+        
+# Process local angle         
+thresh = threshold_li(stack) * thresh_coeff
+local_angle[local_mean<thresh] = np.nan
+local_angle = nanfilt(local_angle.astype('float'), 3, 'median')
+local_angle = np.nan_to_num(local_angle)
+
+# Get vectors 
+vectors = []
+for y, yi in enumerate(np.arange(0, img.shape[0], patch_size)):
+    for x, xi in enumerate(np.arange(0, img.shape[1], patch_size)):
+        
+        if local_mean[y,x] > thresh:
+            vectors.append(np.array([[yi, xi], [
+                np.sin(thetas[int(local_angle[y,x])]-np.pi/2),
+                np.cos(thetas[int(local_angle[y,x])]-np.pi/2)            
+                ]]))
+        else:
+            vectors.append(np.array([[yi, xi], [0,0]]))      
+
+end = time.time()
+print(f'  {(end-start):5.3f} s')
+
+# -----------------------------------------------------------------------------
+
+start = time.time()
+print('???')
+        
+proj_filt = np.zeros((img.shape[0], img.shape[1]))
+for y, yi in enumerate(np.arange(0, img.shape[0], patch_size)):
+    for x, xi in enumerate(np.arange(0, img.shape[1], patch_size)):
+        
+        proj_filt[yi:yi+patch_size,xi:xi+patch_size] = img_filt[
+            int(local_angle[y,x]),yi:yi+patch_size,xi:xi+patch_size
+            ]
+        
+end = time.time()
+print(f'  {(end-start):5.3f} s')
+
+# test = proj_filt[yi:yi+patch_size,xi:xi+patch_size]
+
+# -----------------------------------------------------------------------------
+
+viewer = napari.Viewer()
+viewer.add_image(img)
+viewer.add_image(proj_filt)
 # viewer.add_image(img_filt)
-# viewer.add_image(patched_local_mean)
-# viewer.add_image(patched_max_sd)
-# viewer.add_vectors(vectors, length=patch_size//2)
+# viewer.add_image(local_mean)
+# viewer.add_image(local_angle)
+viewer.add_vectors(vectors, length=patch_size//2)
 
 #%%
 
