@@ -27,47 +27,27 @@ stack = stack[9,...]
 # Gabor kernels
 n_kernels = 16
 kernel_size = 50
+theta = 0
 sigma = 3
-lmbda = 10
-gamma = 0.5
-psi = 0
+lmbda = 20 # 
+gamma = 0.25 # 0 to 1
+psi = 0 # 0 to 6          
 
 #%%
 
-# Get gabor kernels
-kernels = []    
-thetas = np.arange(0, np.pi, np.pi/n_kernels)
-for theta in thetas:        
+# sigma test for gabor kernels
+sigma_kernels = [] 
+for sigma in np.arange(20):
     kernel = cv2.getGaborKernel(
         (kernel_size, kernel_size), 
         sigma, theta, lmbda, gamma, psi, 
         ktype=cv2.CV_64F
         )
-    kernel /= 1.0 * kernel.sum() # Brightness normalization
-    kernels.append(kernel)
-    
-# -----------------------------------------------------------------------------
-            
-# viewer = napari.Viewer()
-# viewer.add_image(np.array(kernels))            
-
-#%%
-
-# # sigma test for gabor kernels
-# sigma_kernels = [] 
-# for sigma in np.arange(20):
-#     kernel = cv2.getGaborKernel(
-#         (kernel_size, kernel_size), 
-#         sigma, theta, lmbda, gamma, psi, 
-#         ktype=cv2.CV_64F
-#         )
-#     # kernel /= 1.0 * kernel.sum() # Brightness normalization
-#     sigma_kernels.append(kernel)
-    
-# -----------------------------------------------------------------------------
-            
-# viewer = napari.Viewer()
-# viewer.add_image(np.array(sigma_kernels))            
+    # kernel /= 1.0 * kernel.sum() # Brightness normalization
+    sigma_kernels.append(kernel)
+               
+viewer = napari.Viewer()
+viewer.add_image(np.array(sigma_kernels))            
     
 #%%
 
@@ -81,9 +61,7 @@ for theta in thetas:
 #         )
 #     # kernel /= 1.0 * kernel.sum() # Brightness normalization
 #     lmbda_kernels.append(kernel)
-    
-# -----------------------------------------------------------------------------
-            
+
 # viewer = napari.Viewer()
 # viewer.add_image(np.array(lmbda_kernels))     
 
@@ -92,7 +70,7 @@ for theta in thetas:
 
 # # gamma test for gabor kernels
 # gamma_kernels = [] 
-# for gamma in np.arange(0,2,0.1):
+# for gamma in np.arange(0,1,0.1):
 #     kernel = cv2.getGaborKernel(
 #         (kernel_size, kernel_size), 
 #         sigma, theta, lmbda, gamma, psi, 
@@ -100,27 +78,23 @@ for theta in thetas:
 #         )
 #     # kernel /= 1.0 * kernel.sum() # Brightness normalization
 #     gamma_kernels.append(kernel)
-    
-# -----------------------------------------------------------------------------
-            
+
 # viewer = napari.Viewer()
 # viewer.add_image(np.array(gamma_kernels))       
 
 #%%
 
-# psi test for gabor kernels
-psi_kernels = [] 
-for psi in np.arange(0,7,1):
-    kernel = cv2.getGaborKernel(
-        (kernel_size, kernel_size), 
-        sigma, theta, lmbda, gamma, psi, 
-        ktype=cv2.CV_64F
-        )
-    # kernel /= 1.0 * kernel.sum() # Brightness normalization
-    psi_kernels.append(kernel)
-    
-# -----------------------------------------------------------------------------
-            
-viewer = napari.Viewer()
-viewer.add_image(np.array(psi_kernels))  
+# # psi test for gabor kernels
+# psi_kernels = [] 
+# for psi in np.arange(0,7,1):
+#     kernel = cv2.getGaborKernel(
+#         (kernel_size, kernel_size), 
+#         sigma, theta, lmbda, gamma, psi, 
+#         ktype=cv2.CV_64F
+#         )
+#     # kernel /= 1.0 * kernel.sum() # Brightness normalization
+#     psi_kernels.append(kernel)
+
+# viewer = napari.Viewer()
+# viewer.add_image(np.array(psi_kernels))  
 
