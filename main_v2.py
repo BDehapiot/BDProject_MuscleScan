@@ -8,13 +8,17 @@ from skimage import io
 from pathlib import Path
 from joblib import Parallel, delayed
 
+
 from tools.nan import nanfilt
 
 #%% Get raw name
 
-# stack_name = 'C1-2022.07.05_Luminy_22hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_1_1.tif'
+stack_name = 'C1-2022.07.05_Luminy_22hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_1_1.tif'
 # stack_name = 'C1-2022.07.05_Luminy_24hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_1_1.tif'
-stack_name = 'C1-2022.07.05_Luminy_26hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_2_2.tif'
+# stack_name = 'C1-2022.07.05_Luminy_26hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_2_2.tif'
+# stack_name = 'C1-2022.07.05_Luminy_28hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_1_1.tif'
+# stack_name = 'C1-2022.07.05_Luminy_30hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_1_1.tif'
+# stack_name = 'C1-2022.07.05_Luminy_32hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_1_1.tif'
 
 #%% Get path and open data
 
@@ -28,7 +32,7 @@ img = stack[9,...]
 
 # General
 patch_size = 20
-thresh_coeff = 1.0
+thresh_coeff = 0.75
 
 # Gabor kernels
 n_kernels = 16
@@ -95,9 +99,10 @@ for y, yi in enumerate(np.arange(0, img.shape[0], patch_size)):
             patch_gfilt = gfilt[:,yi:yi+patch_size,xi:xi+patch_size]        
             argmax[y,x] = np.argmax(np.std(patch_gfilt, axis=(1,2)))            
         else:            
-            argmax[y,x] = np.nan
-            
+            argmax[y,x] = np.nan           
+
 argmax = nanfilt(argmax, 5, 'mean')
+
 gproj = np.zeros_like(img)
 for y, yi in enumerate(np.arange(0, img.shape[0], patch_size)):
     for x, xi in enumerate(np.arange(0, img.shape[1], patch_size)):
@@ -126,32 +131,23 @@ for y, yi in enumerate(np.arange(0, img.shape[0], patch_size)):
             
             gproj[yi:yi+patch_size,xi:xi+patch_size] = 0
                 
-# gproj = sato(gproj, sigmas=sigma, mode='reflect', black_ridges=False)
-# gthresh = threshold_li(gproj, tolerance=1)
-# gmask = gproj > gthresh*thresh_coeff
-# gskel = skeletonize(gmask)
-
 end = time.time()
 print(f'  {(end-start):5.3f} s')  
 
 # -----------------------------------------------------------------------------
 
-from patchify import patchify
+from skimage.morphology import remove_small_holes, remove_small_objects
 
 start = time.time()
 print('??? #2')
 
-all_patches = patchify(
-    gfilt, 
-    (1, patch_size, patch_size), 
-    step=1
-    ).squeeze()
+gthresh = threshold_li(gproj, tolerance=1)
+gmask = gproj > gthresh*1.75 # adjust !!!
 
-all_patches = np.reshape(all_patches, (
-    all_patches.shape[0]*all_patches.shape[1]*all_patches.shape[2], 
-    all_patches.shape[3], 
-    all_patches.shape[4]
-    ))
+gmask = remove_small_holes(gmask, area_threshold=128)
+gmask = remove_small_objects(gmask, min_size=128)
+
+gskel = skeletonize(gmask)
 
 end = time.time()
 print(f'  {(end-start):5.3f} s')  
@@ -159,13 +155,13 @@ print(f'  {(end-start):5.3f} s')
 # -----------------------------------------------------------------------------
 
 viewer = napari.Viewer()
-# viewer.add_image(img)
+viewer.add_image(img)
 # viewer.add_image(mask)
-# viewer.add_image(gfilt) 
+# viewer.add_image(gfilt)
 # viewer.add_image(argmax)
 # viewer.add_image(gproj)  
-# viewer.add_image(gmask) 
-# viewer.add_image(gskel) 
-viewer.add_image(all_patches) 
+viewer.add_image(gmask) 
+viewer.add_image(gskel) 
+# viewer.add_image(all_patches) 
 # viewer.add_image(np.array(kernels))  
     
