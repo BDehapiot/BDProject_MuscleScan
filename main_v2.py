@@ -83,7 +83,6 @@ print(f'  {(end-start):5.3f} s')
 
 # -----------------------------------------------------------------------------
 
-from skimage.filters import sato
 from skimage.morphology import skeletonize
 
 start = time.time()
