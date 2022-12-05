@@ -146,20 +146,112 @@ gfilt3 = apply_gabor_filters(gfilt2, orientation, n_kernels=n_kernels, sigma=sig
 from skimage.morphology import skeletonize, label
 
 start = time.time()
-print('---')
+print('-1-')
 
 gthresh = threshold_li(gfilt3, tolerance=1)
 gmask = gfilt3 > gthresh*3 # adjust !!!
 gmask = remove_small_holes(gmask, area_threshold=128)
 gmask = remove_small_objects(gmask, min_size=128)
-gskel = skeletonize(gmask)
-gskel = gskel ^ (pixconn(gskel, conn=2) > 2)
-gskel = remove_small_objects(gskel, min_size=32, connectivity=2)
-glabels = label(gskel, connectivity=2)
+skel = skeletonize(gmask)
+skel = skel ^ (pixconn(skel, conn=2) > 2)
+skel = remove_small_objects(skel, min_size=32, connectivity=2)
+labels = label(skel, connectivity=2)
 
-unique = np.unique(glabels)
+end = time.time()
+print(f'  {(end-start):5.3f} s')  
 
 # -----------------------------------------------------------------------------
+
+from skimage.morphology import square
+
+start = time.time()
+print('-2-')
+
+conn1_selem = np.array([[0, 1, 0],
+                        [1, 0, 1],
+                        [0, 1, 0]])
+
+conn2_selem = np.array([[1, 1, 1],
+                        [1, 0, 1],
+                        [1, 1, 1]])
+
+# Pad labels border with zeros
+labels = np.pad(labels, 
+    pad_width=((1, 1), (1, 1)),
+    mode='constant', constant_values=0)   
+
+#
+conn2 = pixconn(labels>0, conn=2)
+y,x = np.where(pixconn(labels>0, conn=2)==1)
+l = labels[y,x]; sort = np.argsort(l)
+y = y[sort]; x = x[sort]; l = l[sort]
+y_seeds = np.take(y, np.arange(0, len(y), 2))
+x_seeds = np.take(x, np.arange(0, len(x), 2))
+l_seeds = np.take(l, np.arange(0, len(l), 2))
+
+for i, label in enumerate(l_seeds):
+        
+    ridge = (labels==label).astype('uint8')*2
+    ridge[y_seeds[i], x_seeds[i]] = 1
+    
+    for j in range(np.sum(ridge>0)):
+        
+        y,x = rwhere(ridge,1)
+        
+        pass
+        
+        
+    
+
+# sort = np.argsort(idx)
+# y = y[sort]
+# x = x[sort]
+# idx = idx[sort]
+# y1 = np.take(y, np.arange(0, len(y), 2))
+# x1 = np.take(x, np.arange(0, len(x), 2))
+# idx1 = np.take(idx, np.arange(0, len(idx), 2))
+# y2 = np.take(y, np.arange(1, len(y), 2))
+# x2 = np.take(x, np.arange(1, len(x), 2))
+# idx2 = np.take(idx, np.arange(1, len(idx), 2))
+
+# # Project best orientation 
+# idx = rwhere(mask, 1)
+# idx = tuple(argmin[idx]) + idx 
+
+# for label in range(1, np.max(labels)):
+
+#     ridge = labels==label
+    
+    # rconn1 = pixconn(ridge, conn=1)
+    # rconn2 = pixconn(ridge, conn=2)
+    # endpoints_y, endpoints_x = np.where(rconn2==1)
+    # rconn2[endpoints_y[1],endpoints_x[1]] = 2
+    
+    # rint = np.zeros(np.sum(ridge))
+    # rconn = np.zeros(np.sum(ridge))
+    # for i in range(np.sum(ridge)):
+    
+    #     y,x = np.where(rconn2==1)
+    #     y = int(y)
+    #     x = int(x)
+        
+    #     rint[i] = img[y,x]
+    #     if rconn1[y,x] == 1:        
+    #         rconn[i] = 1
+    #     else:
+    #         rconn[i] = 2
+        
+    #     rconn2[y-1:y+2,x-1:x+2] -= 1
+        
+    #     pass
+
+# rseed_y = rseed_y[0] # Select first endpoint y coordinates
+# rseed_x = rseed_x[0] # Select first endpoint x coordinates
+
+
+
+# endpoints = np.where(ridge_conn==1)
+# seed = (endpoints[0][0], endpoints[1][0])
 
 end = time.time()
 print(f'  {(end-start):5.3f} s')  
@@ -176,8 +268,11 @@ print(f'  {(end-start):5.3f} s')
 # viewer.add_image(gfilt2)
 # viewer.add_image(gfilt3)
 # viewer.add_image(gmask)
-# viewer.add_image(gskel, blending='additive')
-# viewer.add_labels(gbranch)
+# viewer.add_image(skel, blending='additive')
+
+# viewer.add_image(ridge)
+# viewer.add_image(labels)
+# viewer.add_image(conn2)
 
 #%%
 
