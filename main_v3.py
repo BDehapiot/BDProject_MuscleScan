@@ -10,13 +10,14 @@ from joblib import Parallel, delayed
 
 from tools.nan import nanfilt, nanoutliers
 from tools.idx import rwhere
+from tools.conn import pixconn
 
 #%% Get raw name
 
-stack_name = 'C1-2022.07.05_Luminy_22hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_1_1.tif'
+# stack_name = 'C1-2022.07.05_Luminy_22hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_1_1.tif'
 # stack_name = 'C1-2022.07.05_Luminy_24hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_1_1.tif'
 # stack_name = 'C1-2022.07.05_Luminy_26hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_488LP4_2_2.tif'
-# stack_name = 'C1-2022.07.05_Luminy_28hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_1_1.tif'
+stack_name = 'C1-2022.07.05_Luminy_28hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_1_1.tif'
 # stack_name = 'C1-2022.07.05_Luminy_30hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_1_1.tif'
 # stack_name = 'C1-2022.07.05_Luminy_32hrsAPF_Phallo568_aAct488_405nano2_100Xz2.5_AS_1_1.tif'
 
@@ -140,35 +141,43 @@ gfilt2 = apply_gabor_filters(gfilt1, orientation, n_kernels=n_kernels, sigma=sig
 # magnitude, orientation = local_gradient(gfilt2, mask)
 gfilt3 = apply_gabor_filters(gfilt2, orientation, n_kernels=n_kernels, sigma=sigma+2)
 
-# -----------------------------------------------------------------------------
+#%% ---------------------------------------------------------------------------
 
-from skimage.morphology import skeletonize
+from skimage.morphology import skeletonize, label
 
 start = time.time()
-print('??? #2')
+print('---')
 
 gthresh = threshold_li(gfilt3, tolerance=1)
 gmask = gfilt3 > gthresh*3 # adjust !!!
 gmask = remove_small_holes(gmask, area_threshold=128)
 gmask = remove_small_objects(gmask, min_size=128)
 gskel = skeletonize(gmask)
+gskel = gskel ^ (pixconn(gskel, conn=2) > 2)
+gskel = remove_small_objects(gskel, min_size=32, connectivity=2)
+glabels = label(gskel, connectivity=2)
+
+unique = np.unique(glabels)
+
+# -----------------------------------------------------------------------------
 
 end = time.time()
 print(f'  {(end-start):5.3f} s')  
 
 # -----------------------------------------------------------------------------
 
-viewer = napari.Viewer()
-viewer.add_image(img, contrast_limits=(0, 7500))
+# viewer = napari.Viewer()
+# viewer.add_image(img, contrast_limits=(0, 7500))
 # viewer.add_image(mask)
 # viewer.add_image(magnitude)
 # viewer.add_image(orientation)
 # viewer.add_image(np.array(kernels))
 # viewer.add_image(gfilt1) 
 # viewer.add_image(gfilt2)
-viewer.add_image(gfilt3)
+# viewer.add_image(gfilt3)
 # viewer.add_image(gmask)
 # viewer.add_image(gskel, blending='additive')
+# viewer.add_labels(gbranch)
 
 #%%
 
