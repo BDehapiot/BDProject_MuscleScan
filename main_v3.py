@@ -167,37 +167,74 @@ from skimage.morphology import square
 start = time.time()
 print('-2-')
 
-conn1_selem = np.array([[0, 1, 0],
-                        [1, 0, 1],
-                        [0, 1, 0]])
+selem = np.array([[1, 2, 3],
+                  [8, 0, 4],
+                  [7, 6, 5]])
+shift = [
+    (-1,-1), # 1
+    (-1,0),  # 2
+    (-1,1),  # 3
+    (0,1),   # 4  
+    (1,1),   # 5
+    (1,0),   # 6
+    (1,-1),  # 7
+    (0,-1),  # 8
+    ]
 
-conn2_selem = np.array([[1, 1, 1],
-                        [1, 0, 1],
-                        [1, 1, 1]])
-
-# Pad labels border with zeros
+# Pad img & labels
+img = np.pad(img, 
+    pad_width=((1, 1), (1, 1)),
+    mode='constant', constant_values=0)   
 labels = np.pad(labels, 
     pad_width=((1, 1), (1, 1)),
     mode='constant', constant_values=0)   
 
 #
 conn2 = pixconn(labels>0, conn=2)
+y_ends, x_ends = np.where(pixconn(labels>0, conn=2)==1)
+l_ends = labels[y_ends,x_ends]; sort = np.argsort(l_ends)
+y_ends = y_ends[sort]; x_ends = x_ends[sort]; l_ends = l_ends[sort]
+y_seeds = np.take(y_ends, np.arange(0, len(y_ends), 2))
+x_seeds = np.take(x_ends, np.arange(0, len(x_ends), 2))
+l_seeds = np.take(l_ends, np.arange(0, len(l_ends), 2))
+
+
 y,x = np.where(pixconn(labels>0, conn=2)==1)
-l = labels[y,x]; sort = np.argsort(l)
-y = y[sort]; x = x[sort]; l = l[sort]
-y_seeds = np.take(y, np.arange(0, len(y), 2))
-x_seeds = np.take(x, np.arange(0, len(x), 2))
-l_seeds = np.take(l, np.arange(0, len(l), 2))
+l = labels[y,x]; endpoints = np.column_stack((l,y,x))
+idx = np.lexsort((endpoints[:,2],endpoints[:,1],endpoints[:,0]))  
+endpoints = endpoints[idx]
+seeds = np.take(endpoints, np.arange(0, len(y_ends), 2), axis=0)
+
+
+test_ridge = np.zeros_like(labels)
 
 for i, label in enumerate(l_seeds):
         
-    ridge = (labels==label).astype('uint8')*2
-    ridge[y_seeds[i], x_seeds[i]] = 1
+    ridge = (labels==label).astype('uint8')
+    y = y_seeds[i]; x = x_seeds[i]
     
+    intensity = np.zeros((np.sum(ridge>0)))
+    distance = np.zeros((np.sum(ridge>0)))
     for j in range(np.sum(ridge>0)):
         
-        y,x = rwhere(ridge,1)
+        intensity[j] = img[y,x]
         
+        connect = np.sum(ridge[y-1:y+2,x-1:x+2]*selem)
+        
+        if j == 0:          
+            distance[j] = 0            
+        else:            
+            if connect % 2 == 0:              
+                distance[j] = distance[j-1] + 1            
+            else:                
+                distance[j] = distance[j-1] + np.sqrt(2)
+        
+        test_ridge[y,x] = distance[j]
+        
+        ridge[y,x] = 0
+        y = y + shift[connect-1][0]
+        x = x + shift[connect-1][1]
+
         pass
         
         
@@ -258,8 +295,8 @@ print(f'  {(end-start):5.3f} s')
 
 # -----------------------------------------------------------------------------
 
-# viewer = napari.Viewer()
-# viewer.add_image(img, contrast_limits=(0, 7500))
+viewer = napari.Viewer()
+viewer.add_image(img, contrast_limits=(0, 7500))
 # viewer.add_image(mask)
 # viewer.add_image(magnitude)
 # viewer.add_image(orientation)
@@ -270,7 +307,7 @@ print(f'  {(end-start):5.3f} s')
 # viewer.add_image(gmask)
 # viewer.add_image(skel, blending='additive')
 
-# viewer.add_image(ridge)
+viewer.add_image(test_ridge)
 # viewer.add_image(labels)
 # viewer.add_image(conn2)
 
