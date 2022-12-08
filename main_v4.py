@@ -8,12 +8,7 @@ from skimage import io
 from pathlib import Path
 from aicsimageio.readers import CziReader
 from joblib import Parallel, delayed
-
 from functions import get_mask, process_gabor
-from tools.idx import rwhere
-from tools.conn import pixconn
-from tools.nan import nanfilt, nanreplace
-from tools.dtype import ranged_uint8
 
 #%% Hyperstack name
 
@@ -81,7 +76,7 @@ start = time.time()
 print('get_orientations')
 
 # Rescale img & mask
-img_rescale = ranged_uint8(img, percent_low=0.1, percent_high=99.9)
+img_rescale = dtype.ranged_conv(img, intensity_range=(5,95), spread=1.2, dtype='uint8')
 img_rescale = rescale(img_rescale, rescale_factor, preserve_range=True)
 mask_rescale = rescale(mask, rescale_factor, order=0)
 
@@ -92,9 +87,9 @@ orientations = np.arctan2(gradient_h, gradient_v) * (180/np.pi) % 180
 
 # Remove low magnitude orientations
 orientations[magnitudes<min_magnitude] = np.nan
-orientations = nanreplace(orientations, 3, 'median', mask=mask_rescale)
-orientations = nanreplace(orientations, 3, 'median', mask=mask_rescale)
-orientations = nanreplace(orientations, 3, 'median', mask=mask_rescale)
+orientations = nan.replace(orientations, 3, 'median', mask=mask_rescale)
+orientations = nan.replace(orientations, 3, 'median', mask=mask_rescale)
+orientations = nan.replace(orientations, 3, 'median', mask=mask_rescale)
 
 # Smooth orientations map    
 smooth_function = {
@@ -153,7 +148,7 @@ def get_gabor(img, mask, orientations, n_kernels=16, sigma=3):
     best_filter = np.argmin(best_filter, axis=0)
     
     # Project best filter only
-    idx = rwhere(mask, 1)
+    idx = np.where(mask == 1)
     idx = tuple(best_filter[idx]) + idx 
     gabor = np.zeros_like(all_filters)
     gabor[idx] = all_filters[idx]

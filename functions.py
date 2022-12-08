@@ -8,8 +8,7 @@ from skimage.filters import threshold_li
 from skimage.filters import scharr_h, scharr_v, rank
 from skimage.morphology import remove_small_holes, remove_small_objects
 
-from tools.idx import rwhere
-from tools.nan import nanreplace
+from BDTools import dtype, nan, skel
 
 #%% functions
 
@@ -41,9 +40,9 @@ def get_orientations(
     
     # Remove low magnitude orientations
     orientations[magnitudes<min_magnitude] = np.nan
-    orientations = nanreplace(orientations, 3, 'median', mask=mask)
-    orientations = nanreplace(orientations, 3, 'median', mask=mask)
-    orientations = nanreplace(orientations, 3, 'median', mask=mask)
+    orientations = nan.replace(orientations, 3, 'median', mask=mask)
+    orientations = nan.replace(orientations, 3, 'median', mask=mask)
+    orientations = nan.replace(orientations, 3, 'median', mask=mask)
     
     # Smooth orientations map    
     smooth_function = {
@@ -99,7 +98,7 @@ def get_gabor(img, mask, orientations, n_kernels=16, sigma=3):
     best_filter = np.argmin(best_filter, axis=0)
     
     # Project best filter only
-    idx = rwhere(mask, 1)
+    idx = np.where(mask == 1)
     idx = tuple(best_filter[idx]) + idx 
     gabor = np.zeros_like(all_filters)
     gabor[idx] = all_filters[idx]
