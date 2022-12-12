@@ -26,6 +26,7 @@ hstack_name = '2022.10.31_24hrsAPF_Luminy_phallo568_405nano2_488_nano42_647nano6
 #%% Parameters
 
 ridge_channel = 1
+thresh_coeff = 0.75
 
 #%% Open czi file
 
@@ -55,43 +56,45 @@ from skimage.filters import threshold_li, scharr_h, scharr_v, gaussian, rank
 
 rsize_factor = 0.5
 min_magnitude = 0.05
-smooth_size = 64
+smooth_size = 32
 
 start = time.time()
 print('get_orientations')
 
 # Initialize
-smooth_size = smooth_size*rsize_factor
+smooth_size = int(smooth_size*rsize_factor)
 
 # Resize & process img
 rsize = rescale(img, rsize_factor, preserve_range=True)
-# rsize = rsize / gaussian(rsize, sigma=smooth_size)
 rsize = ranged_conversion(
     rsize, intensity_range=(5,95), spread=3, dtype='float')
+
+# Get mask
+mask = rsize > threshold_li(rsize, tolerance=1)*thresh_coeff
+mask = remove_small_holes(mask, area_threshold=rsize.shape[0])
+mask = remove_small_objects(mask, min_size=rsize.shape[0])
 
 # Extract local gradient
 gradient_h = scharr_h(rsize); gradient_v = scharr_v(rsize)
 magnitudes = np.sqrt((gradient_h ** 2) + (gradient_v ** 2))
 orientations = np.arctan2(gradient_h, gradient_v) * (180/np.pi) % 180
 
-# 
-# temp = gaussian(magnitudes, sigma=smooth_size*0.25)
-# temp = rank.entropy(
-#     (magnitudes*255).astype('uint8'),
-#     footprint=disk(3),
-#     )
+# Remove low magnitude orientations
+orientations[magnitudes < min_magnitude] = np.nan
+orientations[mask == False] = np.nan
+orientations = nanreplace(
+    orientations, kernel_size=smooth_size, method='median', mask=mask)
 
-# # Remove low magnitude orientations
-# orientations[gaussian(magnitudes, sigma=smooth_size*0.1) < min_magnitude] = np.nan
+# Smooth orientations map   
+orientations = rank.median(
+    orientations.astype('uint8'), 
+    footprint=disk(smooth_size),
+    mask=mask,
+    ).astype('float')
+orientations[mask == False] = np.nan
 
-# orientations_sd = rank.gradient(
-#     orientations.astype('uint8'), 
-#     footprint=disk(smooth_size*rsize_factor),
-#     mask=~np.isnan(orientations),
-#     ).astype('float')
-
-# orientations = nanreplace(
-#     orientations, kernel_size=7, method='median', mask=mask)
+# # Rescale orientation and remove out of mask signal
+# orientations = rescale(orientations, 1/rsize_factor, preserve_range=True)
 
 end = time.time()
 print(f'  {(end-start):5.3f} s')  
@@ -101,11 +104,10 @@ print(f'  {(end-start):5.3f} s')
 viewer = napari.Viewer()
 # viewer.add_image(img)
 viewer.add_image(rsize)
+# viewer.add_image(mask)
 viewer.add_image(magnitudes)
-# viewer.add_image(orientations)
+viewer.add_image(orientations)
 # viewer.add_image(orientations_sd)
-
-viewer.add_image(temp)
 
 #%%
 
